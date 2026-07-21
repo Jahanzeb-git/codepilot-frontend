@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import {
   ApiError,
@@ -15,6 +16,7 @@ type WorkspaceState = 'idle' | 'launching' | 'provisioning' | 'suspended' | 'res
 const POLL_INTERVAL_MS = 4000
 
 export default function WorkspacePage() {
+  const navigate = useNavigate()
   const { token, email, clearSession } = useAuth()
   const [state, setState] = useState<WorkspaceState>('idle')
   const [machineName, setMachineName] = useState<string | null>(() => storage.getMachineName())
@@ -68,6 +70,11 @@ export default function WorkspacePage() {
         pollTimeoutRef.current = setTimeout(tick, POLL_INTERVAL_MS)
       } catch (err) {
         resumingRef.current = false
+        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+          clearSession()
+          navigate('/login', { replace: true })
+          return
+        }
         if (err instanceof ApiError && err.status === 404) {
           storage.clearMachineName()
           setMachineName(null)
@@ -120,6 +127,11 @@ export default function WorkspacePage() {
       setState('provisioning')
       pollStatus()
     } catch (err) {
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        clearSession()
+        navigate('/login', { replace: true })
+        return
+      }
       setState('error')
       setErrorMessage(err instanceof ApiError ? err.message : 'Could not launch a workspace machine.')
     }
@@ -135,6 +147,11 @@ export default function WorkspacePage() {
       await launchMachine(token)
       pollStatus()
     } catch (err) {
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        clearSession()
+        navigate('/login', { replace: true })
+        return
+      }
       setState('error')
       setErrorMessage(err instanceof ApiError ? err.message : 'Could not resume the workspace machine.')
       resumingRef.current = false
@@ -149,6 +166,11 @@ export default function WorkspacePage() {
       const { ticket } = await getConnectTicket(token)
       window.open(`https://codepilot-api.fly.dev/machines/connect?ticket=${encodeURIComponent(ticket)}`, '_blank', 'noopener')
     } catch (err) {
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        clearSession()
+        navigate('/login', { replace: true })
+        return
+      }
       setErrorMessage(err instanceof ApiError ? err.message : 'Could not create a connection ticket.')
     } finally {
       setIsConnecting(false)
@@ -168,6 +190,11 @@ export default function WorkspacePage() {
       setState('idle')
       setConfirmingDelete(false)
     } catch (err) {
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        clearSession()
+        navigate('/login', { replace: true })
+        return
+      }
       setErrorMessage(err instanceof ApiError ? err.message : 'Could not delete the workspace machine.')
     } finally {
       setIsDeleting(false)
