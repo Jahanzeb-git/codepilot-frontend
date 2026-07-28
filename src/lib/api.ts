@@ -69,6 +69,11 @@ export function getMachineStatus(token: string) {
   return request<MachineStatusResponse>('/machines/status', { method: 'GET' }, token)
 }
 
+export function createStatusSocket(token: string): WebSocket {
+  const wsUrl = API_BASE.replace(/^http/, 'ws')
+  return new WebSocket(`${wsUrl}/machines/ws/status?token=${encodeURIComponent(token)}`)
+}
+
 export interface ConnectTicketResponse {
   ticket: string
 }

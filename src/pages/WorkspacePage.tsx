@@ -1,19 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import {
   ApiError,
   deleteMachine,
   getConnectTicket,
-  getMachineStatus,
   launchMachine,
+  createStatusSocket,
 } from '../lib/api'
 import { storage } from '../lib/storage'
 import './WorkspacePage.css'
 
 type WorkspaceState = 'idle' | 'launching' | 'provisioning' | 'suspended' | 'resuming' | 'ready' | 'error'
-
-const POLL_INTERVAL_MS = 4000
 
 export default function WorkspacePage() {
   const navigate = useNavigate()
@@ -25,90 +23,103 @@ export default function WorkspacePage() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
-  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Distinguishes a user-initiated "wake it up" poll (keep polling through
   // suspended/stopped) from a passive status check (stop and show the resume
   // button instead of hammering /status forever).
   const resumingRef = useRef(false)
 
-  const stopPolling = useCallback(() => {
-    if (pollTimeoutRef.current) {
-      clearTimeout(pollTimeoutRef.current)
-      pollTimeoutRef.current = null
-    }
-  }, [])
-
-  useEffect(() => stopPolling, [stopPolling])
-
-  const pollStatus = useCallback(() => {
+  useEffect(() => {
     if (!token) return
-    const tick = async () => {
-      try {
-        const result = await getMachineStatus(token)
-        if (result.machine_name) {
-          storage.setMachineName(result.machine_name)
-          setMachineName(result.machine_name)
-        }
+    let ws: WebSocket | null = null
 
-        if (result.status === 'ready') {
-          resumingRef.current = false
-          setState('ready')
-          return
-        }
-
-        if (result.status === 'suspended' || result.status === 'stopped') {
-          if (resumingRef.current) {
-            setState('resuming')
-            pollTimeoutRef.current = setTimeout(tick, POLL_INTERVAL_MS)
-          } else {
-            setState('suspended')
+    function connect() {
+      if (ws) ws.close()
+      ws = createStatusSocket(token!)
+      
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          
+          if (data.status === 'idle') {
+            storage.clearMachineName()
+            setMachineName(null)
+            setState('idle')
+            resumingRef.current = false
+            return
           }
-          return
-        }
 
-        setState('provisioning')
-        pollTimeoutRef.current = setTimeout(tick, POLL_INTERVAL_MS)
-      } catch (err) {
-        resumingRef.current = false
-        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+          if (data.status === 'quota_exceeded') {
+            setState('error')
+            const now = new Date()
+            const nextMidnightUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1))
+            
+            const formattedTime = new Intl.DateTimeFormat('en-US', {
+              weekday: 'long',
+              month: 'short', 
+              day: 'numeric',
+              hour: 'numeric',
+              minute: '2-digit',
+              timeZoneName: 'short'
+            }).format(nextMidnightUTC)
+            
+            setErrorMessage(`Daily quota for 3 hours is exhausted. Please come back at ${formattedTime}.`)
+            return
+          }
+
+          if (data.machine_name) {
+            storage.setMachineName(data.machine_name)
+            setMachineName(data.machine_name)
+          }
+
+          if (data.status === 'ready') {
+            resumingRef.current = false
+            setState('ready')
+          } else if (data.status === 'suspended' || data.status === 'stopped') {
+            if (resumingRef.current) {
+              setState('resuming')
+            } else {
+              setState('suspended')
+            }
+          } else if (data.status === 'error') {
+            setState('error')
+            setErrorMessage(data.message || 'Lost contact with the workspace service.')
+          } else {
+            setState('provisioning')
+          }
+        } catch (e) {
+          console.error("Failed to parse status WS message", e)
+        }
+      }
+
+      ws.onclose = (event) => {
+        if (event.code === 1008) {
           clearSession()
           navigate('/login', { replace: true })
-          return
         }
-        if (err instanceof ApiError && err.status === 404) {
-          storage.clearMachineName()
-          setMachineName(null)
-          setState('idle')
-          return
-        }
-        setState('error')
-        setErrorMessage(err instanceof ApiError ? err.message : 'Lost contact with the workspace service.')
       }
     }
-    tick()
-  }, [token])
 
-  // Fresh page load: check the machine's real status once instead of assuming
-  // it's still running or still provisioning from stale local state.
-  useEffect(() => {
-    if (machineName && state === 'idle') {
-      pollStatus()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Tab reactivated: re-check status rather than trusting whatever we last
-  // rendered, since the machine may have been suspended (or removed) while
-  // this tab was hidden. Skip while a poll loop is already in flight.
-  useEffect(() => {
-    function handleVisibilityChange() {
-      if (document.visibilityState === 'visible' && machineName && pollTimeoutRef.current === null && state !== 'launching') {
-        pollStatus()
+    function handleVisibility() {
+      if (document.visibilityState === 'visible') {
+        connect()
+      } else {
+        if (ws) {
+          ws.close()
+          ws = null
+        }
       }
     }
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [machineName, state, pollStatus])
+
+    if (document.visibilityState === 'visible') {
+      connect()
+    }
+
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility)
+      if (ws) ws.close()
+    }
+  }, [token, navigate, clearSession])
 
   async function handleLaunch() {
     if (!token) return
@@ -125,7 +136,6 @@ export default function WorkspacePage() {
       storage.setMachineName(result.machine_name)
       setMachineName(result.machine_name)
       setState('provisioning')
-      pollStatus()
     } catch (err) {
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
         clearSession()
@@ -145,7 +155,6 @@ export default function WorkspacePage() {
     
     try {
       await launchMachine(token)
-      pollStatus()
     } catch (err) {
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
         clearSession()
@@ -183,7 +192,6 @@ export default function WorkspacePage() {
     setErrorMessage(null)
     try {
       await deleteMachine(token)
-      stopPolling()
       resumingRef.current = false
       storage.clearMachineName()
       setMachineName(null)
