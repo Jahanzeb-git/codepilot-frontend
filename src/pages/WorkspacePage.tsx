@@ -137,7 +137,7 @@ export default function WorkspacePage() {
       setMachineName(result.machine_name)
       setState('provisioning')
     } catch (err) {
-      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+      if (err instanceof ApiError && err.status === 401) {
         clearSession()
         navigate('/login', { replace: true })
         return
@@ -156,7 +156,7 @@ export default function WorkspacePage() {
     try {
       await launchMachine(token)
     } catch (err) {
-      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+      if (err instanceof ApiError && err.status === 401) {
         clearSession()
         navigate('/login', { replace: true })
         return
@@ -175,7 +175,7 @@ export default function WorkspacePage() {
       const { ticket } = await getConnectTicket(token)
       window.open(`https://codepilot-api.fly.dev/machines/connect?ticket=${encodeURIComponent(ticket)}`, '_blank', 'noopener')
     } catch (err) {
-      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+      if (err instanceof ApiError && err.status === 401) {
         clearSession()
         navigate('/login', { replace: true })
         return
@@ -198,7 +198,7 @@ export default function WorkspacePage() {
       setState('idle')
       setConfirmingDelete(false)
     } catch (err) {
-      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+      if (err instanceof ApiError && err.status === 401) {
         clearSession()
         navigate('/login', { replace: true })
         return
