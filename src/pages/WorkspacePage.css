@@ -357,3 +357,39 @@
   justify-content: flex-end;
   gap: 0.6rem;
 }
+
+.workspace-quota-premium {
+  max-width: 620px;
+  width: 100%;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  color: var(--text-primary);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem 2rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
+.workspace-quota-icon {
+  font-size: 2.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.workspace-quota-content h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1.15rem;
+  color: var(--accent);
+}
+
+.workspace-quota-content p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+

@@ -11,7 +11,26 @@ import {
 import { storage } from '../lib/storage'
 import './WorkspacePage.css'
 
-type WorkspaceState = 'idle' | 'launching' | 'provisioning' | 'suspended' | 'resuming' | 'ready' | 'error'
+type WorkspaceState = 'idle' | 'launching' | 'provisioning' | 'suspended' | 'resuming' | 'ready' | 'error' | 'quota_exceeded'
+
+function formatQuotaMessage(baseMessage: string) {
+  if (baseMessage.includes('90-hour')) {
+    return 'You have consumed your 90-hour free tier limit.'
+  }
+  const now = new Date()
+  const nextMidnightUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1))
+  
+  const formattedTime = new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    month: 'short', 
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short'
+  }).format(nextMidnightUTC)
+  
+  return `You have consumed your 3-hour daily limit. Please come back after ${formattedTime}.`
+}
 
 export default function WorkspacePage() {
   const navigate = useNavigate()
@@ -19,6 +38,7 @@ export default function WorkspacePage() {
   const [state, setState] = useState<WorkspaceState>('idle')
   const [machineName, setMachineName] = useState<string | null>(() => storage.getMachineName())
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [quotaMessage, setQuotaMessage] = useState<string | null>(null)
   const [showFirstLaunchNotice, setShowFirstLaunchNotice] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
@@ -49,20 +69,8 @@ export default function WorkspacePage() {
           }
 
           if (data.status === 'quota_exceeded') {
-            setState('error')
-            const now = new Date()
-            const nextMidnightUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1))
-            
-            const formattedTime = new Intl.DateTimeFormat('en-US', {
-              weekday: 'long',
-              month: 'short', 
-              day: 'numeric',
-              hour: 'numeric',
-              minute: '2-digit',
-              timeZoneName: 'short'
-            }).format(nextMidnightUTC)
-            
-            setErrorMessage(`Daily quota for 3 hours is exhausted. Please come back at ${formattedTime}.`)
+            setState('quota_exceeded')
+            setQuotaMessage(formatQuotaMessage(data.message || ''))
             return
           }
 
@@ -142,6 +150,11 @@ export default function WorkspacePage() {
         navigate('/login', { replace: true })
         return
       }
+      if (err instanceof ApiError && err.status === 403) {
+        setState('quota_exceeded')
+        setQuotaMessage(formatQuotaMessage(err.message))
+        return
+      }
       setState('error')
       setErrorMessage(err instanceof ApiError ? err.message : 'Could not launch a workspace machine.')
     }
@@ -159,6 +172,12 @@ export default function WorkspacePage() {
       if (err instanceof ApiError && err.status === 401) {
         clearSession()
         navigate('/login', { replace: true })
+        return
+      }
+      if (err instanceof ApiError && err.status === 403) {
+        setState('quota_exceeded')
+        setQuotaMessage(formatQuotaMessage(err.message))
+        resumingRef.current = false
         return
       }
       setState('error')
@@ -248,9 +267,19 @@ export default function WorkspacePage() {
           </div>
         )}
 
-        {errorMessage && (
+        {errorMessage && state !== 'quota_exceeded' && (
           <div className="workspace-error" role="alert">
             {errorMessage}
+          </div>
+        )}
+
+        {state === 'quota_exceeded' && quotaMessage && (
+          <div className="workspace-quota-premium">
+            <div className="workspace-quota-icon">⏳</div>
+            <div className="workspace-quota-content">
+              <h3>Quota Exhausted</h3>
+              <p>{quotaMessage}</p>
+            </div>
           </div>
         )}
 
@@ -303,6 +332,12 @@ export default function WorkspacePage() {
               {state === 'error' && (
                 <button className="workspace-primary-btn" onClick={handleLaunch}>
                   Retry launch
+                </button>
+              )}
+
+              {state === 'quota_exceeded' && (
+                <button className="workspace-ghost-btn" onClick={() => window.location.reload()}>
+                  Refresh status
                 </button>
               )}
 
@@ -365,6 +400,8 @@ function stateLabel(state: WorkspaceState) {
       return 'Ready'
     case 'error':
       return 'Needs attention'
+    case 'quota_exceeded':
+      return 'Quota Limit Hit'
   }
 }
 
