@@ -37,13 +37,7 @@ export interface AuthResponse {
   token_type?: string
 }
 
-export function registerAccount(email: string, password: string) {
-  throw new Error("Standard registration disabled")
-}
 
-export function loginAccount(email: string, password: string) {
-  throw new Error("Standard login disabled")
-}
 
 export interface GuestResponse {
   access_token: string
