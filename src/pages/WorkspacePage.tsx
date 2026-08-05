@@ -47,6 +47,9 @@ export default function WorkspacePage() {
   // suspended/stopped) from a passive status check (stop and show the resume
   // button instead of hammering /status forever).
   const resumingRef = useRef(false)
+  // Prevents the websocket's "idle" or "destroyed" status from overriding the UI
+  // while an HTTP launch request is in flight, avoiding the double-click bug.
+  const launchingRef = useRef(false)
 
   useEffect(() => {
     if (!token) return
@@ -60,11 +63,13 @@ export default function WorkspacePage() {
         try {
           const data = JSON.parse(event.data)
           
-          if (data.status === 'idle') {
-            storage.clearMachineName()
-            setMachineName(null)
-            setState('idle')
-            resumingRef.current = false
+          if (data.status === 'idle' || data.status === 'destroyed') {
+            if (!launchingRef.current) {
+              storage.clearMachineName()
+              setMachineName(null)
+              setState('idle')
+              resumingRef.current = false
+            }
             return
           }
 
@@ -131,6 +136,8 @@ export default function WorkspacePage() {
 
   async function handleLaunch() {
     if (!token) return
+    if (launchingRef.current) return
+    launchingRef.current = true
     setErrorMessage(null)
 
     if (!storage.hasSeenFirstLaunchNotice()) {
@@ -157,11 +164,15 @@ export default function WorkspacePage() {
       }
       setState('error')
       setErrorMessage(err instanceof ApiError ? err.message : 'Could not launch a workspace machine.')
+    } finally {
+      launchingRef.current = false
     }
   }
 
   async function handleResume() {
     if (!token) return
+    if (launchingRef.current) return
+    launchingRef.current = true
     setErrorMessage(null)
     resumingRef.current = true
     setState('resuming')
@@ -183,6 +194,8 @@ export default function WorkspacePage() {
       setState('error')
       setErrorMessage(err instanceof ApiError ? err.message : 'Could not resume the workspace machine.')
       resumingRef.current = false
+    } finally {
+      launchingRef.current = false
     }
   }
 
