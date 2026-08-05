@@ -143,7 +143,7 @@ export default function WorkspacePage() {
       const result = await launchMachine(token)
       storage.setMachineName(result.machine_name)
       setMachineName(result.machine_name)
-      setState('provisioning')
+      setState((prev) => (prev === 'launching' ? 'provisioning' : prev))
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         clearSession()

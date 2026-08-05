@@ -1,50 +1,79 @@
-import { FormEvent, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { FormEvent, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { ApiError, loginAccount, registerAccount } from '../lib/api'
 import './AuthPage.css'
 
-interface AuthPageProps {
-  mode: 'login' | 'register'
-}
-
-export default function AuthPage({ mode }: AuthPageProps) {
+export default function AuthPage() {
   const navigate = useNavigate()
   const { setSession } = useAuth()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
+  const [accessCode, setAccessCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isAutoLoggingIn, setIsAutoLoggingIn] = useState(false)
 
-  const isRegister = mode === 'register'
+  // Portfolio access code
+  const PORTFOLIO_PASSWORD = 'hireme'
+
+  useEffect(() => {
+    const referrer = document.referrer
+    if (referrer.includes('jahanzebahmed.xyz') || referrer.includes('jahanzebahmed.netlify.app')) {
+      handleAutoGuestLogin()
+    }
+  }, [])
+
+  async function handleAutoGuestLogin() {
+    setIsAutoLoggingIn(true)
+    setError(null)
+    try {
+      const randomId = Math.random().toString(36).substring(2, 10)
+      const email = `guest-${randomId}@portfolio.codepilot`
+      const password = `guest-${randomId}-pass`
+      
+      await registerAccount(email, password)
+      const session = await loginAccount(email, password)
+      
+      setSession(session.access_token, email)
+      navigate('/workspace', { replace: true })
+    } catch (err) {
+      setIsAutoLoggingIn(false)
+      if (err instanceof ApiError) {
+        setError(err.message)
+      } else {
+        setError('Failed to auto-generate guest session. Please use the access code.')
+      }
+    }
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setError(null)
 
-    if (isRegister && password !== confirmPassword) {
-      setError('Passwords do not match.')
+    if (accessCode.toLowerCase() !== PORTFOLIO_PASSWORD) {
+      setError('Invalid access code.')
       return
     }
 
     setIsSubmitting(true)
-    try {
-      if (isRegister) {
-        await registerAccount(email, password)
-      }
-      const session = await loginAccount(email, password)
-      setSession(session.access_token, email)
-      navigate('/workspace', { replace: true })
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message)
-      } else {
-        setError('Something went wrong. Check your connection and try again.')
-      }
-    } finally {
-      setIsSubmitting(false)
-    }
+    await handleAutoGuestLogin()
+    setIsSubmitting(false)
+  }
+
+  if (isAutoLoggingIn) {
+    return (
+      <div className="auth-shell">
+        <section className="auth-brand" style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+          <div style={{ textAlign: 'center' }}>
+            <div className="auth-brand-mark" style={{ justifyContent: 'center', marginBottom: '2rem' }}>
+              <span className="auth-brand-glyph" aria-hidden="true">&#9670;</span>
+              <span className="auth-brand-name">Codepilot</span>
+            </div>
+            <h1 className="auth-brand-heading">Preparing your guest workspace...</h1>
+            <p className="auth-brand-copy" style={{ marginTop: '1rem' }}>This may take a few seconds.</p>
+          </div>
+        </section>
+      </div>
+    )
   }
 
   return (
@@ -71,16 +100,12 @@ export default function AuthPage({ mode }: AuthPageProps) {
 
         <dl className="auth-brand-facts">
           <div className="auth-brand-fact">
+            <dt>Portfolio Access</dt>
+            <dd>This is a portfolio demonstration. You need an access code to enter.</dd>
+          </div>
+          <div className="auth-brand-fact">
             <dt>Isolation</dt>
             <dd>One dedicated machine per workspace, never shared between sessions.</dd>
-          </div>
-          <div className="auth-brand-fact">
-            <dt>Provisioning</dt>
-            <dd>Cold starts typically finish in under two minutes on first launch.</dd>
-          </div>
-          <div className="auth-brand-fact">
-            <dt>Access</dt>
-            <dd>Short-lived connection tickets keep credentials off the wire.</dd>
           </div>
         </dl>
       </section>
@@ -88,12 +113,8 @@ export default function AuthPage({ mode }: AuthPageProps) {
       <section className="auth-panel">
         <form className="auth-card" onSubmit={handleSubmit} noValidate>
           <div className="auth-card-header">
-            <h2>{isRegister ? 'Create your account' : 'Sign in'}</h2>
-            <p>
-              {isRegister
-                ? 'Set up access to your agentic coding workspace.'
-                : 'Continue to your agentic coding workspace.'}
-            </p>
+            <h2>Portfolio Access</h2>
+            <p>Enter the access code provided by Jahanzeb.</p>
           </div>
 
           {error && (
@@ -103,60 +124,19 @@ export default function AuthPage({ mode }: AuthPageProps) {
           )}
 
           <label className="auth-field">
-            <span>Email</span>
+            <span>Access Code</span>
             <input
-              type="email"
+              type="text"
               required
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@company.com"
+              value={accessCode}
+              onChange={(e) => setAccessCode(e.target.value)}
+              placeholder="Enter access code"
             />
           </label>
-
-          <label className="auth-field">
-            <span>Password</span>
-            <input
-              type="password"
-              required
-              minLength={8}
-              autoComplete={isRegister ? 'new-password' : 'current-password'}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 8 characters"
-            />
-          </label>
-
-          {isRegister && (
-            <label className="auth-field">
-              <span>Confirm password</span>
-              <input
-                type="password"
-                required
-                minLength={8}
-                autoComplete="new-password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Re-enter your password"
-              />
-            </label>
-          )}
 
           <button className="auth-submit" type="submit" disabled={isSubmitting}>
-            {isSubmitting ? 'Please wait…' : isRegister ? 'Create account' : 'Sign in'}
+            {isSubmitting ? 'Please wait…' : 'Enter Workspace'}
           </button>
-
-          <p className="auth-switch">
-            {isRegister ? (
-              <>
-                Already have an account? <Link to="/login">Sign in</Link>
-              </>
-            ) : (
-              <>
-                New to Codepilot? <Link to="/register">Create an account</Link>
-              </>
-            )}
-          </p>
         </form>
       </section>
     </div>

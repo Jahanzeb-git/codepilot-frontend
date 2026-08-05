@@ -16,11 +16,7 @@ export default function App() {
     <Routes>
       <Route
         path="/login"
-        element={isAuthenticated ? <Navigate to="/workspace" replace /> : <AuthPage mode="login" />}
-      />
-      <Route
-        path="/register"
-        element={isAuthenticated ? <Navigate to="/workspace" replace /> : <AuthPage mode="register" />}
+        element={isAuthenticated ? <Navigate to="/workspace" replace /> : <AuthPage />}
       />
       <Route
         path="/workspace"
