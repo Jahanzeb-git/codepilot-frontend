@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { ApiError, loginAccount, registerAccount } from '../lib/api'
+import { ApiError, guestLogin } from '../lib/api'
 import './AuthPage.css'
 
 export default function AuthPage() {
@@ -12,28 +12,20 @@ export default function AuthPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isAutoLoggingIn, setIsAutoLoggingIn] = useState(false)
 
-  // Portfolio access code
-  const PORTFOLIO_PASSWORD = 'hireme'
-
   useEffect(() => {
     const referrer = document.referrer
     if (referrer.includes('jahanzebahmed.xyz') || referrer.includes('jahanzebahmed.netlify.app')) {
-      handleAutoGuestLogin()
+      // If coming from portfolio, try the default code
+      handleAutoGuestLogin('hireme')
     }
   }, [])
 
-  async function handleAutoGuestLogin() {
+  async function handleAutoGuestLogin(codeToUse: string) {
     setIsAutoLoggingIn(true)
     setError(null)
     try {
-      const randomId = Math.random().toString(36).substring(2, 10)
-      const email = `guest-${randomId}@portfolio.codepilot`
-      const password = `guest-${randomId}-pass`
-      
-      await registerAccount(email, password)
-      const session = await loginAccount(email, password)
-      
-      setSession(session.access_token, email)
+      const session = await guestLogin(codeToUse)
+      setSession(session.access_token, session.email)
       navigate('/workspace', { replace: true })
     } catch (err) {
       setIsAutoLoggingIn(false)
@@ -48,14 +40,8 @@ export default function AuthPage() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setError(null)
-
-    if (accessCode.toLowerCase() !== PORTFOLIO_PASSWORD) {
-      setError('Invalid access code.')
-      return
-    }
-
     setIsSubmitting(true)
-    await handleAutoGuestLogin()
+    await handleAutoGuestLogin(accessCode)
     setIsSubmitting(false)
   }
 

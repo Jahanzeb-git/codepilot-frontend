@@ -38,16 +38,23 @@ export interface AuthResponse {
 }
 
 export function registerAccount(email: string, password: string) {
-  return request<{ id?: string; email?: string }>('/auth/register', {
-    method: 'POST',
-    body: JSON.stringify({ email, password }),
-  })
+  throw new Error("Standard registration disabled")
 }
 
 export function loginAccount(email: string, password: string) {
-  return request<AuthResponse>('/auth/login', {
+  throw new Error("Standard login disabled")
+}
+
+export interface GuestResponse {
+  access_token: string
+  token_type?: string
+  email: string
+}
+
+export function guestLogin(accessCode: string) {
+  return request<GuestResponse>('/auth/guest', {
     method: 'POST',
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ access_code: accessCode }),
   })
 }
 
