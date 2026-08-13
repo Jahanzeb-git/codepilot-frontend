@@ -48,6 +48,7 @@ export interface GuestResponse {
 export function guestLogin(accessCode: string) {
   return request<GuestResponse>('/auth/guest', {
     method: 'POST',
+    credentials: 'include',
     body: JSON.stringify({ access_code: accessCode }),
   })
 }
